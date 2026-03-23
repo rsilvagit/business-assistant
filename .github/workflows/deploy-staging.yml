@@ -1,0 +1,67 @@
+name: Deploy - Staging
+
+on:
+  push:
+    branches: [develop]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/api
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/BusinessAssistant.Api
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to staging server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STG_SERVER_HOST }}
+          username: ${{ secrets.STG_SERVER_USER }}
+          key: ${{ secrets.STG_SSH_PRIVATE_KEY }}
+          script: |
+            cd ${{ secrets.STG_DEPLOY_PATH }}
+
+            export ASPNETCORE_ENVIRONMENT=Staging
+            export DB_CONNECTION_STRING="${{ secrets.STG_DB_CONNECTION_STRING }}"
+            export REDIS_CONNECTION_STRING="${{ secrets.STG_REDIS_CONNECTION_STRING }}"
+            export REDIS_PASSWORD="${{ secrets.STG_REDIS_PASSWORD }}"
+            export POSTGRES_USER="${{ secrets.STG_POSTGRES_USER }}"
+            export POSTGRES_PASSWORD="${{ secrets.STG_POSTGRES_PASSWORD }}"
+            export POSTGRES_DB="${{ secrets.STG_POSTGRES_DB }}"
+            export JWT_PRIVATE_KEY="${{ secrets.STG_JWT_PRIVATE_KEY }}"
+            export JWT_EXPIRATION_HOURS="${{ secrets.STG_JWT_EXPIRATION_HOURS }}"
+            export JWT_REFRESH_EXPIRATION_HOURS="${{ secrets.STG_JWT_REFRESH_EXPIRATION_HOURS }}"
+
+            docker compose -f docker-compose.deploy.yml pull
+            docker compose -f docker-compose.deploy.yml up -d --build
+            docker image prune -f

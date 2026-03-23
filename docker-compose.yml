@@ -9,10 +9,9 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=businessassistant;Username=postgres;Password=postgres
       - ConnectionStrings__Redis=redis:6379
-      - Jwt__Key=SuperSecretKeyForDevelopmentOnly_ChangeInProduction_MinimumOf32Characters!
-      - Jwt__Issuer=BusinessAssistant
-      - Jwt__Audience=BusinessAssistant
-      - Jwt__ExpirationInHours=2
+      - Jwt__PrivateKey=vAOrr4I6DfFoRWIT2GTpMsnoYYDFqD408onNx6oS3U
+      - Jwt__ExpirationInHours=1
+      - Jwt__RefreshTokenExpirationInHours=24
     depends_on:
       postgres:
         condition: service_healthy

@@ -55,17 +55,17 @@ jobs:
           script: |
             cd ${{ secrets.PROD_DEPLOY_PATH }}
 
+            export ASPNETCORE_ENVIRONMENT=Production
             export DB_CONNECTION_STRING="${{ secrets.PROD_DB_CONNECTION_STRING }}"
             export REDIS_CONNECTION_STRING="${{ secrets.PROD_REDIS_CONNECTION_STRING }}"
             export REDIS_PASSWORD="${{ secrets.PROD_REDIS_PASSWORD }}"
             export POSTGRES_USER="${{ secrets.PROD_POSTGRES_USER }}"
             export POSTGRES_PASSWORD="${{ secrets.PROD_POSTGRES_PASSWORD }}"
             export POSTGRES_DB="${{ secrets.PROD_POSTGRES_DB }}"
-            export JWT_KEY="${{ secrets.PROD_JWT_KEY }}"
-            export JWT_ISSUER="${{ secrets.PROD_JWT_ISSUER }}"
-            export JWT_AUDIENCE="${{ secrets.PROD_JWT_AUDIENCE }}"
+            export JWT_PRIVATE_KEY="${{ secrets.PROD_JWT_PRIVATE_KEY }}"
             export JWT_EXPIRATION_HOURS="${{ secrets.PROD_JWT_EXPIRATION_HOURS }}"
+            export JWT_REFRESH_EXPIRATION_HOURS="${{ secrets.PROD_JWT_REFRESH_EXPIRATION_HOURS }}"
 
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --build
+            docker compose -f docker-compose.deploy.yml pull
+            docker compose -f docker-compose.deploy.yml up -d --build
             docker image prune -f
