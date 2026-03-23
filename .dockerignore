@@ -1,0 +1,13 @@
+**/.git
+**/.vs
+**/.idea
+**/bin
+**/obj
+**/.dockerignore
+**/Dockerfile
+**/docker-compose*
+**/*.md
+**/*.db
+**/*.db-shm
+**/*.db-wal
+.github
