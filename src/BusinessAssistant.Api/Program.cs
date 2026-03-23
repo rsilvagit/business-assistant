@@ -5,6 +5,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services
     .AddDatabaseConfiguration(builder.Configuration)
+    .AddRedisConfiguration(builder.Configuration)
     .AddJwtAuthentication(builder.Configuration)
     .AddRateLimitConfiguration()
     .AddSwaggerConfiguration()

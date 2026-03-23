@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using BusinessAssistant.Api.DTOs;
 using BusinessAssistant.Api.Services;
 using FluentValidation;
@@ -59,6 +60,20 @@ public static class AuthEndpoints
         .Produces<LoginResponse>()
         .ProducesValidationProblem()
         .WithName("Login")
+        .WithOpenApi();
+
+        group.MapPost("/logout", async (HttpContext httpContext, IAuthService authService) =>
+        {
+            var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null)
+                return Results.Unauthorized();
+
+            await authService.LogoutAsync(userId);
+            return Results.Ok(new { message = "Logged out successfully." });
+        })
+        .RequireAuthorization()
+        .Produces(StatusCodes.Status200OK)
+        .WithName("Logout")
         .WithOpenApi();
     }
 }

@@ -11,6 +11,7 @@ public static class DependencyInjectionConfiguration
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ICustomerService, CustomerService>();
+        services.AddScoped<ITokenCacheService, TokenCacheService>();
 
         services.AddValidatorsFromAssemblyContaining<Program>();
 

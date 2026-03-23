@@ -10,17 +10,20 @@ public class AuthService : IAuthService
     private readonly AppDbContext _context;
     private readonly IPasswordHasher _passwordHasher;
     private readonly ITokenService _tokenService;
+    private readonly ITokenCacheService _tokenCache;
     private readonly IConfiguration _configuration;
 
     public AuthService(
         AppDbContext context,
         IPasswordHasher passwordHasher,
         ITokenService tokenService,
+        ITokenCacheService tokenCache,
         IConfiguration configuration)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
+        _tokenCache = tokenCache;
         _configuration = configuration;
     }
 
@@ -45,8 +48,10 @@ public class AuthService : IAuthService
         await _context.SaveChangesAsync();
 
         var token = _tokenService.GenerateToken(user);
-        var expiration = DateTime.UtcNow.AddHours(
-            double.Parse(_configuration["Jwt:ExpirationInHours"]!));
+        var expirationHours = double.Parse(_configuration["Jwt:ExpirationInHours"]!);
+        var expiration = DateTime.UtcNow.AddHours(expirationHours);
+
+        await _tokenCache.StoreTokenAsync(user.Id.ToString(), token, TimeSpan.FromHours(expirationHours));
 
         return new LoginResponse(token, expiration);
     }
@@ -60,9 +65,16 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid username or password.");
 
         var token = _tokenService.GenerateToken(user);
-        var expiration = DateTime.UtcNow.AddHours(
-            double.Parse(_configuration["Jwt:ExpirationInHours"]!));
+        var expirationHours = double.Parse(_configuration["Jwt:ExpirationInHours"]!);
+        var expiration = DateTime.UtcNow.AddHours(expirationHours);
+
+        await _tokenCache.StoreTokenAsync(user.Id.ToString(), token, TimeSpan.FromHours(expirationHours));
 
         return new LoginResponse(token, expiration);
+    }
+
+    public async Task LogoutAsync(string userId)
+    {
+        await _tokenCache.RevokeTokenAsync(userId);
     }
 }
