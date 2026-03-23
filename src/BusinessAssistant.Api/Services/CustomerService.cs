@@ -9,10 +9,12 @@ namespace BusinessAssistant.Api.Services;
 public class CustomerService : ICustomerService
 {
     private readonly AppDbContext _context;
+    private readonly ILogger<CustomerService> _logger;
 
-    public CustomerService(AppDbContext context)
+    public CustomerService(AppDbContext context, ILogger<CustomerService> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task<CustomerResponse> CreateAsync(CreateCustomerRequest request)
@@ -29,6 +31,8 @@ public class CustomerService : ICustomerService
 
         _context.Customers.Add(customer);
         await _context.SaveChangesAsync();
+
+        _logger.LogInformation("[CustomerService:CreateAsync] Customer created: {CustomerId}, Email: {Email}", customer.Id, customer.Email);
 
         return MapToResponse(customer);
     }
@@ -48,6 +52,8 @@ public class CustomerService : ICustomerService
             .OrderBy(c => c.Name)
             .ToListAsync();
 
+        _logger.LogInformation("[CustomerService:GetAllAsync] Retrieved {Count} active customers", customers.Count);
+
         return customers.Select(MapToResponse);
     }
 
@@ -64,6 +70,8 @@ public class CustomerService : ICustomerService
 
         await _context.SaveChangesAsync();
 
+        _logger.LogInformation("[CustomerService:UpdateAsync] Customer updated: {CustomerId}", customer.Id);
+
         return MapToResponse(customer);
     }
 
@@ -75,6 +83,8 @@ public class CustomerService : ICustomerService
         customer.IsActive = false;
         customer.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+
+        _logger.LogInformation("[CustomerService:DeleteAsync] Customer soft-deleted: {CustomerId}", customer.Id);
     }
 
     private static CustomerResponse MapToResponse(Customer customer) =>

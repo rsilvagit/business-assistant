@@ -42,12 +42,13 @@ public class ExceptionMiddleware
             _ => (HttpStatusCode.InternalServerError, BuildResponse("An unexpected error occurred.", []))
         };
 
-        if (statusCode == HttpStatusCode.InternalServerError)
-            _logger.LogError(exception, "Unhandled exception at {Path}", context.Request.Path);
-        else
-            _logger.LogInformation("Handled exception at {Path}: {Message}", context.Request.Path, errors.Messages);
-
         errors.StatusCode = statusCode;
+
+        _logger.LogInformation("[ExceptionHandlingMiddleware] - Rota: {Path} - {Response}", context.Request.Path, errors);
+
+        if (statusCode == HttpStatusCode.InternalServerError)
+            _logger.LogError(exception, "[ExceptionHandlingMiddleware] - Rota: {Path}", context.Request.Path);
+
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = (int)statusCode;
 
