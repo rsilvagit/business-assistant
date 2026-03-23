@@ -40,12 +40,19 @@ public class AuthService : IAuthService
         {
             Id = Guid.NewGuid(),
             Username = request.Username,
-            PasswordHash = hash,
-            PasswordSalt = salt,
             Role = "User"
         };
 
+        var credential = new UserCredential
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            PasswordHash = hash,
+            PasswordSalt = salt
+        };
+
         _context.Users.Add(user);
+        _context.UserCredentials.Add(credential);
         await _context.SaveChangesAsync();
 
         return await GenerateAuthResponseAsync(user);
@@ -54,9 +61,11 @@ public class AuthService : IAuthService
     public async Task<LoginResponse> LoginAsync(LoginRequest request)
     {
         var user = await _context.Users
+            .Include(u => u.Credential)
             .FirstOrDefaultAsync(u => u.Username == request.Username);
 
-        if (user is null || !_passwordHasher.Verify(request.Password, user.PasswordHash, user.PasswordSalt))
+        if (user?.Credential is null ||
+            !_passwordHasher.Verify(request.Password, user.Credential.PasswordHash, user.Credential.PasswordSalt))
             throw new UnauthorizedAccessException("Invalid username or password.");
 
         return await GenerateAuthResponseAsync(user);
@@ -64,64 +73,40 @@ public class AuthService : IAuthService
 
     public async Task<LoginResponse> RefreshTokenAsync(string refreshToken)
     {
-        var storedToken = await _context.RefreshTokens
-            .Include(r => r.User)
-            .FirstOrDefaultAsync(r => r.Token == refreshToken);
+        var userId = await _tokenCache.GetUserIdByRefreshTokenAsync(refreshToken);
 
-        if (storedToken is null || !storedToken.IsActive)
+        if (userId is null)
             throw new UnauthorizedAccessException("Invalid or expired refresh token.");
 
-        storedToken.RevokedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
+        var user = await _context.Users.FindAsync(Guid.Parse(userId));
 
-        return await GenerateAuthResponseAsync(storedToken.User);
+        if (user is null)
+            throw new UnauthorizedAccessException("User not found.");
+
+        return await GenerateAuthResponseAsync(user);
     }
 
     public async Task LogoutAsync(string userId)
     {
-        var guidUserId = Guid.Parse(userId);
-
-        var activeTokens = await _context.RefreshTokens
-            .Where(r => r.UserId == guidUserId && r.RevokedAt == null)
-            .ToListAsync();
-
-        foreach (var token in activeTokens)
-            token.RevokedAt = DateTime.UtcNow;
-
-        await _context.SaveChangesAsync();
-        await _tokenCache.RevokeTokenAsync(userId);
+        await _tokenCache.RevokeAllTokensAsync(userId);
     }
 
     private async Task<LoginResponse> GenerateAuthResponseAsync(User user)
     {
         var accessToken = _tokenService.GenerateToken(user);
         var expirationHours = double.Parse(_configuration["Jwt:ExpirationInHours"]!);
+        var refreshTokenDays = int.Parse(_configuration["Jwt:RefreshTokenExpirationInDays"] ?? "7");
         var expiration = DateTime.UtcNow.AddHours(expirationHours);
 
-        await _tokenCache.StoreTokenAsync(user.Id.ToString(), accessToken, TimeSpan.FromHours(expirationHours));
+        var refreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
 
-        var refreshTokenDays = int.Parse(_configuration["Jwt:RefreshTokenExpirationInDays"] ?? "7");
-        var refreshToken = await CreateRefreshTokenAsync(user.Id, refreshTokenDays);
+        await _tokenCache.StoreTokensAsync(
+            user.Id.ToString(),
+            accessToken,
+            refreshToken,
+            TimeSpan.FromHours(expirationHours),
+            TimeSpan.FromDays(refreshTokenDays));
 
-        return new LoginResponse(accessToken, refreshToken.Token, expiration);
-    }
-
-    private async Task<RefreshToken> CreateRefreshTokenAsync(Guid userId, int expirationDays)
-    {
-        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
-
-        var refreshToken = new RefreshToken
-        {
-            Id = Guid.NewGuid(),
-            Token = token,
-            UserId = userId,
-            ExpiresAt = DateTime.UtcNow.AddDays(expirationDays),
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _context.RefreshTokens.Add(refreshToken);
-        await _context.SaveChangesAsync();
-
-        return refreshToken;
+        return new LoginResponse(accessToken, refreshToken, expiration);
     }
 }

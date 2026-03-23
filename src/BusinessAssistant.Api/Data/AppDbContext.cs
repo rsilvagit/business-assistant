@@ -9,7 +9,7 @@ public class AppDbContext : DbContext
 
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<User> Users => Set<User>();
-    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<UserCredential> UserCredentials => Set<UserCredential>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -29,19 +29,17 @@ public class AppDbContext : DbContext
             entity.HasKey(u => u.Id);
             entity.HasIndex(u => u.Username).IsUnique();
             entity.Property(u => u.Username).HasMaxLength(100).IsRequired();
-            entity.Property(u => u.PasswordHash).IsRequired();
-            entity.Property(u => u.PasswordSalt).IsRequired();
             entity.Property(u => u.Role).HasMaxLength(50).IsRequired();
         });
 
-        modelBuilder.Entity<RefreshToken>(entity =>
+        modelBuilder.Entity<UserCredential>(entity =>
         {
-            entity.HasKey(r => r.Id);
-            entity.HasIndex(r => r.Token).IsUnique();
-            entity.Property(r => r.Token).HasMaxLength(256).IsRequired();
-            entity.HasOne(r => r.User)
-                .WithMany()
-                .HasForeignKey(r => r.UserId)
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.PasswordHash).IsRequired();
+            entity.Property(c => c.PasswordSalt).IsRequired();
+            entity.HasOne(c => c.User)
+                .WithOne(u => u.Credential)
+                .HasForeignKey<UserCredential>(c => c.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
