@@ -1,9 +1,9 @@
 namespace BusinessAssistant.Api.DTOs;
 
-public record RegisterRequest(string Username, string Password);
+public record LoginDto(string Email, string Password);
 
-public record LoginRequest(string Username, string Password);
+public record SignupDto(string Email, string Password, string ConfirmPassword) : LoginDto(Email, Password);
 
-public record RefreshTokenRequest(string RefreshToken);
+public record RequestRefreshTokenDto(string RefreshToken);
 
-public record LoginResponse(string Token, string RefreshToken, DateTime ExpiresAt);
+public record AuthResponse(string AccessToken, string RefreshToken);

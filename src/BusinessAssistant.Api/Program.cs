@@ -1,5 +1,6 @@
 using BusinessAssistant.Api.Configurations;
 using BusinessAssistant.Api.Endpoints;
+using BusinessAssistant.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,7 +10,8 @@ builder.Services
     .AddJwtAuthentication(builder.Configuration)
     .AddRateLimitConfiguration()
     .AddSwaggerConfiguration()
-    .AddApplicationServices();
+    .AddApplicationServices()
+    .AddHttpContextAccessor();
 
 var app = builder.Build();
 
@@ -17,6 +19,7 @@ app.UseSwaggerConfiguration();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<ClaimsMiddleware>();
 app.UseRateLimiter();
 app.UseDatabaseMigration();
 

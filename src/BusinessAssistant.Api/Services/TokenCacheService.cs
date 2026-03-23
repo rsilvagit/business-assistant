@@ -1,75 +1,40 @@
-using Microsoft.Extensions.Caching.Distributed;
-
 namespace BusinessAssistant.Api.Services;
 
 public class TokenCacheService : ITokenCacheService
 {
-    private readonly IDistributedCache _cache;
-    private const string AccessTokenPrefix = "access:";
-    private const string RefreshTokenPrefix = "refresh:";
-    private const string RefreshLookupPrefix = "refresh_lookup:";
-    private const string RevokedPrefix = "revoked:";
+    private readonly IRedisService _redis;
+    private static readonly TimeSpan BlacklistTtl = TimeSpan.FromDays(7);
 
-    public TokenCacheService(IDistributedCache cache)
+    public TokenCacheService(IRedisService redis)
     {
-        _cache = cache;
+        _redis = redis;
     }
 
-    public async Task StoreTokensAsync(string userId, string accessToken, string refreshToken, TimeSpan accessExpiration, TimeSpan refreshExpiration)
+    public async Task StoreRefreshTokenAsync(string refreshToken, string accessToken, TimeSpan expiry)
     {
-        var oldRefreshToken = await _cache.GetStringAsync($"{RefreshTokenPrefix}{userId}");
-        if (oldRefreshToken is not null)
-            await _cache.RemoveAsync($"{RefreshLookupPrefix}{oldRefreshToken}");
-
-        var accessOptions = new DistributedCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = accessExpiration
-        };
-
-        var refreshOptions = new DistributedCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = refreshExpiration
-        };
-
-        await _cache.SetStringAsync($"{AccessTokenPrefix}{userId}", accessToken, accessOptions);
-        await _cache.SetStringAsync($"{RefreshTokenPrefix}{userId}", refreshToken, refreshOptions);
-        await _cache.SetStringAsync($"{RefreshLookupPrefix}{refreshToken}", userId, refreshOptions);
+        await _redis.SetAsync($"token:refresh:{refreshToken}", accessToken, expiry);
     }
 
-    public async Task<string?> GetAccessTokenAsync(string userId)
+    public async Task<string?> GetAccessTokenByRefreshTokenAsync(string refreshToken)
     {
-        return await _cache.GetStringAsync($"{AccessTokenPrefix}{userId}");
+        return await _redis.GetStringAsync($"token:refresh:{refreshToken}");
     }
 
-    public async Task<string?> GetUserIdByRefreshTokenAsync(string refreshToken)
+    public async Task BlacklistTokenAsync(Guid accountId, string token)
     {
-        return await _cache.GetStringAsync($"{RefreshLookupPrefix}{refreshToken}");
+        var tokenPrefix = token.Length >= 15 ? token[..15] : token;
+        await _redis.SetAsync($"token:blacklist:{accountId}:{tokenPrefix}", "true", BlacklistTtl);
     }
 
-    public async Task RevokeAllTokensAsync(string userId)
+    public async Task<bool> IsTokenBlacklistedAsync(Guid accountId, string token)
     {
-        var accessToken = await _cache.GetStringAsync($"{AccessTokenPrefix}{userId}");
-        var refreshToken = await _cache.GetStringAsync($"{RefreshTokenPrefix}{userId}");
-
-        if (accessToken is not null)
-        {
-            var revokedOptions = new DistributedCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(2)
-            };
-            await _cache.SetStringAsync($"{RevokedPrefix}{accessToken}", "revoked", revokedOptions);
-        }
-
-        if (refreshToken is not null)
-            await _cache.RemoveAsync($"{RefreshLookupPrefix}{refreshToken}");
-
-        await _cache.RemoveAsync($"{AccessTokenPrefix}{userId}");
-        await _cache.RemoveAsync($"{RefreshTokenPrefix}{userId}");
-    }
-
-    public async Task<bool> IsTokenRevokedAsync(string token)
-    {
-        var value = await _cache.GetStringAsync($"{RevokedPrefix}{token}");
+        var tokenPrefix = token.Length >= 15 ? token[..15] : token;
+        var value = await _redis.GetStringAsync($"token:blacklist:{accountId}:{tokenPrefix}");
         return value is not null;
+    }
+
+    public async Task DeleteRefreshTokenAsync(string refreshToken)
+    {
+        await _redis.DeleteAsync($"token:refresh:{refreshToken}");
     }
 }

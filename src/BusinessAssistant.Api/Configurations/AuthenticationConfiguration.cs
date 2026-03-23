@@ -8,7 +8,8 @@ public static class AuthenticationConfiguration
 {
     public static IServiceCollection AddJwtAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
-        var jwtSettings = configuration.GetSection("Jwt");
+        var privateKey = configuration["Jwt:PrivateKey"]!;
+        var key = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(privateKey));
 
         services.AddAuthentication(options =>
         {
@@ -17,16 +18,15 @@ public static class AuthenticationConfiguration
         })
         .AddJwtBearer(options =>
         {
+            options.RequireHttpsMetadata = false;
+            options.SaveToken = true;
             options.TokenValidationParameters = new TokenValidationParameters
             {
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
-                ValidIssuer = jwtSettings["Issuer"],
-                ValidAudience = jwtSettings["Audience"],
-                IssuerSigningKey = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes(jwtSettings["Key"]!)),
+                IssuerSigningKey = key,
+                ValidateIssuer = false,
+                ValidateAudience = false,
+                ValidateLifetime = true,
                 ClockSkew = TimeSpan.Zero
             };
         });

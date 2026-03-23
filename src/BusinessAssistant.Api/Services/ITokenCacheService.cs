@@ -2,9 +2,9 @@ namespace BusinessAssistant.Api.Services;
 
 public interface ITokenCacheService
 {
-    Task StoreTokensAsync(string userId, string accessToken, string refreshToken, TimeSpan accessExpiration, TimeSpan refreshExpiration);
-    Task<string?> GetAccessTokenAsync(string userId);
-    Task<string?> GetUserIdByRefreshTokenAsync(string refreshToken);
-    Task RevokeAllTokensAsync(string userId);
-    Task<bool> IsTokenRevokedAsync(string token);
+    Task StoreRefreshTokenAsync(string refreshToken, string accessToken, TimeSpan expiry);
+    Task<string?> GetAccessTokenByRefreshTokenAsync(string refreshToken);
+    Task BlacklistTokenAsync(Guid accountId, string token);
+    Task<bool> IsTokenBlacklistedAsync(Guid accountId, string token);
+    Task DeleteRefreshTokenAsync(string refreshToken);
 }

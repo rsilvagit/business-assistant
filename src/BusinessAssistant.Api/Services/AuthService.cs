@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using System.IdentityModel.Tokens.Jwt;
 using BusinessAssistant.Api.Data;
 using BusinessAssistant.Api.DTOs;
 using BusinessAssistant.Api.Models;
@@ -28,85 +28,102 @@ public class AuthService : IAuthService
         _configuration = configuration;
     }
 
-    public async Task<LoginResponse> RegisterAsync(RegisterRequest request)
+    public async Task<AuthResponse> SignupAsync(SignupDto request)
     {
-        var exists = await _context.Users.AnyAsync(u => u.Username == request.Username);
+        var exists = await _context.Users.AnyAsync(u => u.Email == request.Email);
         if (exists)
-            throw new InvalidOperationException("Username already exists.");
-
-        var (hash, salt) = _passwordHasher.Hash(request.Password);
+            throw new InvalidOperationException("Email already registered.");
 
         var user = new User
         {
             Id = Guid.NewGuid(),
-            Username = request.Username,
-            Role = "User"
+            Name = request.Email.Split('@')[0],
+            Email = request.Email,
+            Role = "User",
+            Status = AccountStatus.Active
         };
 
-        var credential = new UserCredential
+        var passwordModel = new PasswordModel
         {
             Id = Guid.NewGuid(),
-            UserId = user.Id,
-            PasswordHash = hash,
-            PasswordSalt = salt
+            Salt = Guid.NewGuid(),
+            AccountId = user.Id,
+            Actived = true
         };
 
+        var saltObject = new SaltObject(passwordModel.Id, passwordModel.Salt);
+        passwordModel.Password = _passwordHasher.Hash(request.Password, saltObject);
+
         _context.Users.Add(user);
-        _context.UserCredentials.Add(credential);
+        _context.Passwords.Add(passwordModel);
         await _context.SaveChangesAsync();
 
         return await GenerateAuthResponseAsync(user);
     }
 
-    public async Task<LoginResponse> LoginAsync(LoginRequest request)
+    public async Task<AuthResponse> LoginAsync(LoginDto request)
     {
         var user = await _context.Users
-            .Include(u => u.Credential)
-            .FirstOrDefaultAsync(u => u.Username == request.Username);
+            .FirstOrDefaultAsync(u => u.Email == request.Email);
 
-        if (user?.Credential is null ||
-            !_passwordHasher.Verify(request.Password, user.Credential.PasswordHash, user.Credential.PasswordSalt))
-            throw new UnauthorizedAccessException("Invalid username or password.");
+        if (user is null)
+            throw new UnauthorizedAccessException("Invalid email or password.");
+
+        var password = await _context.Passwords
+            .FirstOrDefaultAsync(p => p.AccountId == user.Id && p.Actived == true);
+
+        if (password is null)
+            throw new UnauthorizedAccessException("Invalid email or password.");
+
+        var saltObject = new SaltObject(password.Id, password.Salt);
+        if (!_passwordHasher.Verify(request.Password, password.Password, saltObject))
+            throw new UnauthorizedAccessException("Invalid email or password.");
+
+        if (user.Status == AccountStatus.Pending)
+        {
+            user.Status = AccountStatus.Active;
+            await _context.SaveChangesAsync();
+        }
 
         return await GenerateAuthResponseAsync(user);
     }
 
-    public async Task<LoginResponse> RefreshTokenAsync(string refreshToken)
+    public async Task<AuthResponse> RefreshTokenAsync(string refreshToken)
     {
-        var userId = await _tokenCache.GetUserIdByRefreshTokenAsync(refreshToken);
-
-        if (userId is null)
+        var storedAccessToken = await _tokenCache.GetAccessTokenByRefreshTokenAsync(refreshToken);
+        if (storedAccessToken is null)
             throw new UnauthorizedAccessException("Invalid or expired refresh token.");
 
-        var user = await _context.Users.FindAsync(Guid.Parse(userId));
+        var handler = new JwtSecurityTokenHandler();
+        var jwtToken = handler.ReadJwtToken(storedAccessToken);
+        var accountIdClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == "accountId")?.Value;
 
+        if (accountIdClaim is null || !Guid.TryParse(accountIdClaim, out var accountId))
+            throw new UnauthorizedAccessException("Invalid token claims.");
+
+        var user = await _context.Users.FindAsync(accountId);
         if (user is null)
             throw new UnauthorizedAccessException("User not found.");
 
+        await _tokenCache.BlacklistTokenAsync(accountId, storedAccessToken);
+        await _tokenCache.DeleteRefreshTokenAsync(refreshToken);
+
         return await GenerateAuthResponseAsync(user);
     }
 
-    public async Task LogoutAsync(string userId)
+    public async Task LogoutAsync(Guid accountId, string token)
     {
-        await _tokenCache.RevokeAllTokensAsync(userId);
+        await _tokenCache.BlacklistTokenAsync(accountId, token);
     }
 
-    private async Task<LoginResponse> GenerateAuthResponseAsync(User user)
+    private async Task<AuthResponse> GenerateAuthResponseAsync(User user)
     {
         var accessToken = _tokenService.GenerateToken(user);
-        var expirationHours = double.Parse(_configuration["Jwt:ExpirationInHours"]!);
-        var refreshTokenDays = int.Parse(_configuration["Jwt:RefreshTokenExpirationInDays"] ?? "7");
-        var expiration = DateTime.UtcNow.AddHours(expirationHours);
+        var refreshToken = _tokenService.GenerateRefreshToken();
 
-        var refreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        var refreshTokenHours = int.Parse(_configuration["Jwt:RefreshTokenExpirationInHours"] ?? "24");
+        await _tokenCache.StoreRefreshTokenAsync(refreshToken, accessToken, TimeSpan.FromHours(refreshTokenHours));
 
-        await _tokenCache.StoreTokensAsync(
-            user.Id.ToString(),
-            accessToken,
-            refreshToken,
-            TimeSpan.FromHours(expirationHours),
-            TimeSpan.FromDays(refreshTokenDays));
-
-        return new LoginResponse(accessToken, refreshToken, expiration);
+        return new AuthResponse($"Bearer {accessToken}", refreshToken);
     }
 }

@@ -1,29 +1,20 @@
 using System.Security.Cryptography;
+using System.Text;
 
 namespace BusinessAssistant.Api.Services;
 
 public class PasswordHasher : IPasswordHasher
 {
-    private const int SaltSize = 32;
-    private const int KeySize = 64;
-    private const int Iterations = 100_000;
-    private static readonly HashAlgorithmName Algorithm = HashAlgorithmName.SHA512;
-
-    public (string hash, string salt) Hash(string password)
+    public string Hash(string password, SaltObject saltObject)
     {
-        var salt = RandomNumberGenerator.GetBytes(SaltSize);
-        var hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, Algorithm, KeySize);
-
-        return (Convert.ToBase64String(hash), Convert.ToBase64String(salt));
+        var input = $"{password}:{saltObject.Id}:{saltObject.Salt}";
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexStringLower(bytes);
     }
 
-    public bool Verify(string password, string hash, string salt)
+    public bool Verify(string password, string hash, SaltObject saltObject)
     {
-        var saltBytes = Convert.FromBase64String(salt);
-        var hashBytes = Convert.FromBase64String(hash);
-
-        var inputHash = Rfc2898DeriveBytes.Pbkdf2(password, saltBytes, Iterations, Algorithm, KeySize);
-
-        return CryptographicOperations.FixedTimeEquals(inputHash, hashBytes);
+        var computedHash = Hash(password, saltObject);
+        return string.Equals(computedHash, hash, StringComparison.Ordinal);
     }
 }

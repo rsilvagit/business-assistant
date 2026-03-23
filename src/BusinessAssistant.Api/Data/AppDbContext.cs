@@ -9,7 +9,7 @@ public class AppDbContext : DbContext
 
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<User> Users => Set<User>();
-    public DbSet<UserCredential> UserCredentials => Set<UserCredential>();
+    public DbSet<PasswordModel> Passwords => Set<PasswordModel>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -26,20 +26,24 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<User>(entity =>
         {
+            entity.ToTable("Account");
             entity.HasKey(u => u.Id);
-            entity.HasIndex(u => u.Username).IsUnique();
-            entity.Property(u => u.Username).HasMaxLength(100).IsRequired();
+            entity.HasIndex(u => u.Email).IsUnique();
+            entity.Property(u => u.Name).HasMaxLength(200).IsRequired();
+            entity.Property(u => u.Email).HasMaxLength(200).IsRequired();
+            entity.Property(u => u.Phone).HasMaxLength(20);
             entity.Property(u => u.Role).HasMaxLength(50).IsRequired();
+            entity.Property(u => u.Status).HasColumnType("smallint");
         });
 
-        modelBuilder.Entity<UserCredential>(entity =>
+        modelBuilder.Entity<PasswordModel>(entity =>
         {
-            entity.HasKey(c => c.Id);
-            entity.Property(c => c.PasswordHash).IsRequired();
-            entity.Property(c => c.PasswordSalt).IsRequired();
-            entity.HasOne(c => c.User)
-                .WithOne(u => u.Credential)
-                .HasForeignKey<UserCredential>(c => c.UserId)
+            entity.ToTable("Password");
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.Password).HasMaxLength(100).IsRequired();
+            entity.HasOne(p => p.Account)
+                .WithMany()
+                .HasForeignKey(p => p.AccountId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

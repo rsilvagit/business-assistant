@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using BusinessAssistant.Api.DTOs;
 using BusinessAssistant.Api.Services;
 using FluentValidation;
@@ -9,12 +8,12 @@ public static class AuthEndpoints
 {
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/auth")
+        var group = app.MapGroup("/api/v1/auth")
             .WithTags("Auth");
 
-        group.MapPost("/register", async (
-            RegisterRequest request,
-            IValidator<RegisterRequest> validator,
+        group.MapPost("/signup", async (
+            SignupDto request,
+            IValidator<SignupDto> validator,
             IAuthService authService) =>
         {
             var validation = await validator.ValidateAsync(request);
@@ -23,8 +22,8 @@ public static class AuthEndpoints
 
             try
             {
-                var response = await authService.RegisterAsync(request);
-                return Results.Ok(response);
+                await authService.SignupAsync(request);
+                return Results.Created();
             }
             catch (InvalidOperationException ex)
             {
@@ -32,14 +31,14 @@ public static class AuthEndpoints
             }
         })
         .AllowAnonymous()
-        .Produces<LoginResponse>()
+        .Produces(StatusCodes.Status201Created)
         .ProducesValidationProblem()
-        .WithName("Register")
+        .WithName("Signup")
         .WithOpenApi();
 
         group.MapPost("/login", async (
-            LoginRequest request,
-            IValidator<LoginRequest> validator,
+            LoginDto request,
+            IValidator<LoginDto> validator,
             IAuthService authService) =>
         {
             var validation = await validator.ValidateAsync(request);
@@ -57,15 +56,20 @@ public static class AuthEndpoints
             }
         })
         .AllowAnonymous()
-        .Produces<LoginResponse>()
+        .Produces<AuthResponse>()
         .ProducesValidationProblem()
         .WithName("Login")
         .WithOpenApi();
 
-        group.MapPost("/refresh", async (
-            RefreshTokenRequest request,
+        group.MapPost("/refresh-token", async (
+            RequestRefreshTokenDto request,
+            IValidator<RequestRefreshTokenDto> validator,
             IAuthService authService) =>
         {
+            var validation = await validator.ValidateAsync(request);
+            if (!validation.IsValid)
+                return Results.ValidationProblem(validation.ToDictionary());
+
             try
             {
                 var response = await authService.RefreshTokenAsync(request.RefreshToken);
@@ -77,17 +81,23 @@ public static class AuthEndpoints
             }
         })
         .AllowAnonymous()
-        .Produces<LoginResponse>()
+        .Produces<AuthResponse>()
+        .ProducesValidationProblem()
         .WithName("RefreshToken")
         .WithOpenApi();
 
-        group.MapPost("/logout", async (HttpContext httpContext, IAuthService authService) =>
+        group.MapPost("/logout", async (
+            HttpContext httpContext,
+            IUserClaims userClaims,
+            IAuthService authService) =>
         {
-            var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (userId is null)
+            if (userClaims.AccountId == Guid.Empty)
                 return Results.Unauthorized();
 
-            await authService.LogoutAsync(userId);
+            var token = httpContext.Request.Headers.Authorization
+                .ToString().Replace("Bearer ", "");
+
+            await authService.LogoutAsync(userClaims.AccountId, token);
             return Results.Ok(new { message = "Logged out successfully." });
         })
         .RequireAuthorization()

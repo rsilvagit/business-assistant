@@ -7,10 +7,12 @@ public static class DependencyInjectionConfiguration
 {
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
+        services.AddScoped<IUserClaims, UserClaims>();
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ICustomerService, CustomerService>();
+        services.AddScoped<IRedisService, RedisService>();
         services.AddScoped<ITokenCacheService, TokenCacheService>();
 
         services.AddValidatorsFromAssemblyContaining<Program>();

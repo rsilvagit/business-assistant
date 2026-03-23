@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using BusinessAssistant.Api.Models;
 using Microsoft.IdentityModel.Tokens;
@@ -17,24 +18,30 @@ public class TokenService : ITokenService
 
     public string GenerateToken(User user)
     {
-        var jwtSettings = _configuration.GetSection("Jwt");
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]!));
-        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var privateKey = _configuration["Jwt:PrivateKey"]!;
+        var key = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(privateKey));
+        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256Signature);
 
         var claims = new[]
         {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.Username),
+            new Claim("accountId", user.Id.ToString()),
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim(ClaimTypes.Name, user.Name),
             new Claim(ClaimTypes.Role, user.Role)
         };
 
+        var expirationHours = double.Parse(_configuration["Jwt:ExpirationInHours"] ?? "1");
+
         var token = new JwtSecurityToken(
-            issuer: jwtSettings["Issuer"],
-            audience: jwtSettings["Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(double.Parse(jwtSettings["ExpirationInHours"]!)),
+            expires: DateTime.UtcNow.AddHours(expirationHours),
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public string GenerateRefreshToken()
+    {
+        return Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
     }
 }

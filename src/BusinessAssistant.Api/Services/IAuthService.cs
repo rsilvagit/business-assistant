@@ -4,8 +4,8 @@ namespace BusinessAssistant.Api.Services;
 
 public interface IAuthService
 {
-    Task<LoginResponse> RegisterAsync(RegisterRequest request);
-    Task<LoginResponse> LoginAsync(LoginRequest request);
-    Task<LoginResponse> RefreshTokenAsync(string refreshToken);
-    Task LogoutAsync(string userId);
+    Task<AuthResponse> SignupAsync(SignupDto request);
+    Task<AuthResponse> LoginAsync(LoginDto request);
+    Task<AuthResponse> RefreshTokenAsync(string refreshToken);
+    Task LogoutAsync(Guid accountId, string token);
 }
