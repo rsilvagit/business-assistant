@@ -62,6 +62,25 @@ public static class AuthEndpoints
         .WithName("Login")
         .WithOpenApi();
 
+        group.MapPost("/refresh", async (
+            RefreshTokenRequest request,
+            IAuthService authService) =>
+        {
+            try
+            {
+                var response = await authService.RefreshTokenAsync(request.RefreshToken);
+                return Results.Ok(response);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Results.Unauthorized();
+            }
+        })
+        .AllowAnonymous()
+        .Produces<LoginResponse>()
+        .WithName("RefreshToken")
+        .WithOpenApi();
+
         group.MapPost("/logout", async (HttpContext httpContext, IAuthService authService) =>
         {
             var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);

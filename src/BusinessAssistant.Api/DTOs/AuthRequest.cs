@@ -4,4 +4,6 @@ public record RegisterRequest(string Username, string Password);
 
 public record LoginRequest(string Username, string Password);
 
-public record LoginResponse(string Token, DateTime ExpiresAt);
+public record RefreshTokenRequest(string RefreshToken);
+
+public record LoginResponse(string Token, string RefreshToken, DateTime ExpiresAt);
