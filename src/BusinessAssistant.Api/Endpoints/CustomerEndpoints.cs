@@ -1,4 +1,5 @@
 using BusinessAssistant.Api.DTOs;
+using BusinessAssistant.Api.Exceptions;
 using BusinessAssistant.Api.Services;
 using FluentValidation;
 
@@ -8,7 +9,7 @@ public static class CustomerEndpoints
 {
     public static void MapCustomerEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/customers")
+        var group = app.MapGroup("/api/v1/customers")
             .WithTags("Customers")
             .RequireAuthorization();
 
@@ -24,10 +25,9 @@ public static class CustomerEndpoints
         group.MapGet("/{id:guid}", async (Guid id, ICustomerService service) =>
         {
             var customer = await service.GetByIdAsync(id);
-            return customer is null ? Results.NotFound() : Results.Ok(customer);
+            return Results.Ok(customer);
         })
         .Produces<CustomerResponse>()
-        .Produces(StatusCodes.Status404NotFound)
         .WithName("GetCustomerById")
         .WithOpenApi();
 
@@ -38,13 +38,12 @@ public static class CustomerEndpoints
         {
             var validation = await validator.ValidateAsync(request);
             if (!validation.IsValid)
-                return Results.ValidationProblem(validation.ToDictionary());
+                throw BadRequest400Exception.ValidationResult(validation.Errors);
 
             var customer = await service.CreateAsync(request);
-            return Results.Created($"/api/customers/{customer.Id}", customer);
+            return Results.Created($"/api/v1/customers/{customer.Id}", customer);
         })
         .Produces<CustomerResponse>(StatusCodes.Status201Created)
-        .ProducesValidationProblem()
         .WithName("CreateCustomer")
         .WithOpenApi();
 
@@ -56,24 +55,21 @@ public static class CustomerEndpoints
         {
             var validation = await validator.ValidateAsync(request);
             if (!validation.IsValid)
-                return Results.ValidationProblem(validation.ToDictionary());
+                throw BadRequest400Exception.ValidationResult(validation.Errors);
 
             var customer = await service.UpdateAsync(id, request);
-            return customer is null ? Results.NotFound() : Results.Ok(customer);
+            return Results.Ok(customer);
         })
         .Produces<CustomerResponse>()
-        .ProducesValidationProblem()
-        .Produces(StatusCodes.Status404NotFound)
         .WithName("UpdateCustomer")
         .WithOpenApi();
 
         group.MapDelete("/{id:guid}", async (Guid id, ICustomerService service) =>
         {
-            var deleted = await service.DeleteAsync(id);
-            return deleted ? Results.NoContent() : Results.NotFound();
+            await service.DeleteAsync(id);
+            return Results.NoContent();
         })
         .Produces(StatusCodes.Status204NoContent)
-        .Produces(StatusCodes.Status404NotFound)
         .WithName("DeleteCustomer")
         .WithOpenApi();
     }

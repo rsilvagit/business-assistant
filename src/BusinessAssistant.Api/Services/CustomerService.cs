@@ -1,5 +1,6 @@
 using BusinessAssistant.Api.Data;
 using BusinessAssistant.Api.DTOs;
+using BusinessAssistant.Api.Exceptions;
 using BusinessAssistant.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,10 +33,12 @@ public class CustomerService : ICustomerService
         return MapToResponse(customer);
     }
 
-    public async Task<CustomerResponse?> GetByIdAsync(Guid id)
+    public async Task<CustomerResponse> GetByIdAsync(Guid id)
     {
-        var customer = await _context.Customers.FindAsync(id);
-        return customer is null ? null : MapToResponse(customer);
+        var customer = await _context.Customers.FindAsync(id)
+            ?? throw new NotFound404Exception("Customer not found.");
+
+        return MapToResponse(customer);
     }
 
     public async Task<IEnumerable<CustomerResponse>> GetAllAsync()
@@ -48,10 +51,10 @@ public class CustomerService : ICustomerService
         return customers.Select(MapToResponse);
     }
 
-    public async Task<CustomerResponse?> UpdateAsync(Guid id, UpdateCustomerRequest request)
+    public async Task<CustomerResponse> UpdateAsync(Guid id, UpdateCustomerRequest request)
     {
-        var customer = await _context.Customers.FindAsync(id);
-        if (customer is null) return null;
+        var customer = await _context.Customers.FindAsync(id)
+            ?? throw new NotFound404Exception("Customer not found.");
 
         customer.Name = request.Name;
         customer.Email = request.Email;
@@ -64,16 +67,14 @@ public class CustomerService : ICustomerService
         return MapToResponse(customer);
     }
 
-    public async Task<bool> DeleteAsync(Guid id)
+    public async Task DeleteAsync(Guid id)
     {
-        var customer = await _context.Customers.FindAsync(id);
-        if (customer is null) return false;
+        var customer = await _context.Customers.FindAsync(id)
+            ?? throw new NotFound404Exception("Customer not found.");
 
         customer.IsActive = false;
         customer.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
-
-        return true;
     }
 
     private static CustomerResponse MapToResponse(Customer customer) =>

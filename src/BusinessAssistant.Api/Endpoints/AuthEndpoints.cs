@@ -1,4 +1,5 @@
 using BusinessAssistant.Api.DTOs;
+using BusinessAssistant.Api.Exceptions;
 using BusinessAssistant.Api.Services;
 using FluentValidation;
 
@@ -18,21 +19,13 @@ public static class AuthEndpoints
         {
             var validation = await validator.ValidateAsync(request);
             if (!validation.IsValid)
-                return Results.ValidationProblem(validation.ToDictionary());
+                throw BadRequest400Exception.ValidationResult(validation.Errors);
 
-            try
-            {
-                await authService.SignupAsync(request);
-                return Results.Created();
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.Conflict(new { error = ex.Message });
-            }
+            await authService.SignupAsync(request);
+            return Results.Created();
         })
         .AllowAnonymous()
         .Produces(StatusCodes.Status201Created)
-        .ProducesValidationProblem()
         .WithName("Signup")
         .WithOpenApi();
 
@@ -43,21 +36,13 @@ public static class AuthEndpoints
         {
             var validation = await validator.ValidateAsync(request);
             if (!validation.IsValid)
-                return Results.ValidationProblem(validation.ToDictionary());
+                throw BadRequest400Exception.ValidationResult(validation.Errors);
 
-            try
-            {
-                var response = await authService.LoginAsync(request);
-                return Results.Ok(response);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return Results.Unauthorized();
-            }
+            var response = await authService.LoginAsync(request);
+            return Results.Ok(response);
         })
         .AllowAnonymous()
         .Produces<AuthResponse>()
-        .ProducesValidationProblem()
         .WithName("Login")
         .WithOpenApi();
 
@@ -68,21 +53,13 @@ public static class AuthEndpoints
         {
             var validation = await validator.ValidateAsync(request);
             if (!validation.IsValid)
-                return Results.ValidationProblem(validation.ToDictionary());
+                throw BadRequest400Exception.ValidationResult(validation.Errors);
 
-            try
-            {
-                var response = await authService.RefreshTokenAsync(request.RefreshToken);
-                return Results.Ok(response);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return Results.Unauthorized();
-            }
+            var response = await authService.RefreshTokenAsync(request.RefreshToken);
+            return Results.Ok(response);
         })
         .AllowAnonymous()
         .Produces<AuthResponse>()
-        .ProducesValidationProblem()
         .WithName("RefreshToken")
         .WithOpenApi();
 
@@ -92,7 +69,7 @@ public static class AuthEndpoints
             IAuthService authService) =>
         {
             if (userClaims.AccountId == Guid.Empty)
-                return Results.Unauthorized();
+                throw new Unauthorized401Exception("User not authenticated.");
 
             var token = httpContext.Request.Headers.Authorization
                 .ToString().Replace("Bearer ", "");

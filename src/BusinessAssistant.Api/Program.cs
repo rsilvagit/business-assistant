@@ -15,6 +15,7 @@ builder.Services
 
 var app = builder.Build();
 
+app.UseMiddleware<ExceptionMiddleware>();
 app.UseSwaggerConfiguration();
 app.UseHttpsRedirection();
 app.UseAuthentication();

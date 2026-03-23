@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using BusinessAssistant.Api.Data;
 using BusinessAssistant.Api.DTOs;
+using BusinessAssistant.Api.Exceptions;
 using BusinessAssistant.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,7 +33,7 @@ public class AuthService : IAuthService
     {
         var exists = await _context.Users.AnyAsync(u => u.Email == request.Email);
         if (exists)
-            throw new InvalidOperationException("Email already registered.");
+            throw new Conflict409Exception("Email already registered.");
 
         var user = new User
         {
@@ -67,17 +68,17 @@ public class AuthService : IAuthService
             .FirstOrDefaultAsync(u => u.Email == request.Email);
 
         if (user is null)
-            throw new UnauthorizedAccessException("Invalid email or password.");
+            throw Forbidden403Exception.EmailOrPassword();
 
         var password = await _context.Passwords
             .FirstOrDefaultAsync(p => p.AccountId == user.Id && p.Actived == true);
 
         if (password is null)
-            throw new UnauthorizedAccessException("Invalid email or password.");
+            throw Forbidden403Exception.EmailOrPassword();
 
         var saltObject = new SaltObject(password.Id, password.Salt);
         if (!_passwordHasher.Verify(request.Password, password.Password, saltObject))
-            throw new UnauthorizedAccessException("Invalid email or password.");
+            throw Forbidden403Exception.EmailOrPassword();
 
         if (user.Status == AccountStatus.Pending)
         {
@@ -92,18 +93,17 @@ public class AuthService : IAuthService
     {
         var storedAccessToken = await _tokenCache.GetAccessTokenByRefreshTokenAsync(refreshToken);
         if (storedAccessToken is null)
-            throw new UnauthorizedAccessException("Invalid or expired refresh token.");
+            throw Forbidden403Exception.RefreshToken();
 
         var handler = new JwtSecurityTokenHandler();
         var jwtToken = handler.ReadJwtToken(storedAccessToken);
         var accountIdClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == "accountId")?.Value;
 
         if (accountIdClaim is null || !Guid.TryParse(accountIdClaim, out var accountId))
-            throw new UnauthorizedAccessException("Invalid token claims.");
+            throw Forbidden403Exception.TokenInvalid();
 
-        var user = await _context.Users.FindAsync(accountId);
-        if (user is null)
-            throw new UnauthorizedAccessException("User not found.");
+        var user = await _context.Users.FindAsync(accountId)
+            ?? throw new NotFound404Exception("User not found.");
 
         await _tokenCache.BlacklistTokenAsync(accountId, storedAccessToken);
         await _tokenCache.DeleteRefreshTokenAsync(refreshToken);
